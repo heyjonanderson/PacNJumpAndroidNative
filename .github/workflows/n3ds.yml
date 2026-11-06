@@ -51,9 +51,20 @@ jobs:
           B=$DEVKITPRO/devkitARM/bin/arm-none-eabi
           ELF=$(ls build/*.elf | head -1); echo "elf=$ELF"
           for a in 0x1B9350 0x1C5E14; do echo "== $a"; $B-addr2line -f -C -e $ELF $a; done
-          $B-nm -n -C $ELF | awk '{print}' > /tmp/syms.txt
-          echo "== neighbours of PC"; awk 'BEGIN{pc=strtonum("0x1B9350")} {a=strtonum("0x"$1); if (a<=pc) {l2=l1; l1=$0} else if (!d) {print l2; print l1; print $0; d=1}}' /tmp/syms.txt
-          echo "== disasm around PC"; $B-objdump -d -C --start-address=0x1B9310 --stop-address=0x1B9380 $ELF | tail -40
-          echo "== disasm around LR"; $B-objdump -d -C --start-address=0x1C5DE0 --stop-address=0x1C5E20 $ELF | tail -25
+          $B-nm -n $ELF > /tmp/syms.txt
+          python3 - <<'PY'
+          pc = 0x1B9350
+          prev = []
+          for l in open('/tmp/syms.txt'):
+              f = l.split()
+              if len(f) < 3: continue
+              a = int(f[0], 16)
+              if a > pc:
+                  print("\n".join(prev[-3:])); print("NEXT", l.strip()); break
+              prev.append(l.strip())
+          PY
+          echo "== disasm around PC"; $B-objdump -d --start-address=0x1B9300 --stop-address=0x1B9380 $ELF | tail -45
+          echo "== disasm around LR"; $B-objdump -d --start-address=0x1C5DE0 --stop-address=0x1C5E20 $ELF | tail -25
+          echo "== who calls opendsp"; $B-nm -n $ELF | grep -i "opendsp" | head -40
       - uses: actions/upload-artifact@v4
         with: { name: "pacnjump-3ds-${{ env.PNJ_VERSION }}", path: out/ }
