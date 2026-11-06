@@ -45,5 +45,24 @@ jobs:
           cmake -S . -B build-alt -G Ninja -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/3DS.cmake -DCMAKE_BUILD_TYPE=Release -DPNJ_VERSION=$PNJ_VERSION -DPNJ_3DS_TEX_FLIP=1
           cmake --build build-alt
           mkdir -p out && cp build/pacnjump.3dsx out/pacnjump.3dsx && cp build-alt/pacnjump.3dsx out/pacnjump-flip1.3dsx
+      - name: Symbolize crash addresses
+        run: |
+          export DEVKITPRO=${DEVKITPRO:-/opt/devkitpro}
+          B=$DEVKITPRO/devkitARM/bin/arm-none-eabi
+          ELF=build/pacnjump.elf
+          echo "== addr2line"; $B-addr2line -f -C -e $ELF 0x147444
+          $B-nm -n $ELF > /tmp/syms.txt
+          python3 - <<'PY'
+          import bisect
+          syms=[]
+          for l in open('/tmp/syms.txt'):
+              f=l.split()
+              if len(f)>=3:
+                  syms.append((int(f[0],16),f[2],f[1]))
+          for a in (0x147444,0x288610,0x247600,0x245608,0x1b0000):
+              i=bisect.bisect_right([x[0] for x in syms],a)-1
+              print(hex(a), syms[i][1], syms[i][2], hex(a-syms[i][0]))
+          PY
+          echo "== disasm"; $B-objdump -d -S --start-address=0x147400 --stop-address=0x147470 $ELF | tail -80
       - uses: actions/upload-artifact@v4
         with: { name: "pacnjump-3ds-${{ env.PNJ_VERSION }}", path: out/ }
