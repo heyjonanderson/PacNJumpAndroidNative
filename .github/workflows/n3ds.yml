@@ -45,5 +45,15 @@ jobs:
           cmake -S . -B build-alt -G Ninja -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/3DS.cmake -DCMAKE_BUILD_TYPE=Release -DPNJ_VERSION=$PNJ_VERSION -DPNJ_3DS_TEX_FLIP=1
           cmake --build build-alt
           mkdir -p out && cp build/pacnjump.3dsx out/pacnjump.3dsx && cp build-alt/pacnjump.3dsx out/pacnjump-flip1.3dsx
+      - name: Symbolize crash addresses
+        run: |
+          export DEVKITPRO=${DEVKITPRO:-/opt/devkitpro}
+          B=$DEVKITPRO/devkitARM/bin/arm-none-eabi
+          ELF=$(ls build/*.elf | head -1); echo "elf=$ELF"
+          for a in 0x1B9350 0x1C5E14; do echo "== $a"; $B-addr2line -f -C -e $ELF $a; done
+          $B-nm -n -C $ELF | awk '{print}' > /tmp/syms.txt
+          echo "== neighbours of PC"; awk 'BEGIN{pc=strtonum("0x1B9350")} {a=strtonum("0x"$1); if (a<=pc) {l2=l1; l1=$0} else if (!d) {print l2; print l1; print $0; d=1}}' /tmp/syms.txt
+          echo "== disasm around PC"; $B-objdump -d -C --start-address=0x1B9310 --stop-address=0x1B9380 $ELF | tail -40
+          echo "== disasm around LR"; $B-objdump -d -C --start-address=0x1C5DE0 --stop-address=0x1C5E20 $ELF | tail -25
       - uses: actions/upload-artifact@v4
         with: { name: "pacnjump-3ds-${{ env.PNJ_VERSION }}", path: out/ }
